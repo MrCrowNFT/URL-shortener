@@ -1,0 +1,56 @@
+body{
+    justify-content: center;
+    align-items: center;
+    display: flex;
+    background-image: url(Images/background.jpg);
+}
+
+h1{
+    text-align: center;
+    color: #DAE0F2;
+}
+
+form{
+    display: flex;
+}
+
+
+
+.flex-container {
+    padding: 10px;
+    background-color: #363636;
+    margin-left: 35%;
+    margin-right: 35%;
+    border-radius: 25px;
+    width: 45vh;
+    height: 90vh;
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.logo {
+    text-align: center;
+    height: 35%;
+}
+
+input[type="url"]{
+    background: none;
+    border: none;
+    border-bottom: 1px solid #DAE0F2;
+    width: 35vh; 
+    padding: 1%;
+    height: 5vh;
+    flex-grow: 1;
+    outline: none; 
+    color: #DAE0F2;
+}
+
+input[type="sumbit"]{
+    border-radius: 25px;
+    width: 10vh;
+    height: 5vh;
+    color: #DAE0F2;
+}
