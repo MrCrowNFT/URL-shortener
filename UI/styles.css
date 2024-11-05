@@ -1,16 +1,16 @@
-body{
+body {
     justify-content: center;
     align-items: center;
     display: flex;
     background-image: url(Images/background.jpg);
 }
 
-h1{
+h1 {
     text-align: center;
     color: #DAE0F2;
 }
 
-form{
+form {
     display: flex;
 }
 
@@ -36,21 +36,22 @@ form{
     height: 35%;
 }
 
-input[type="url"]{
+input[type="url"] {
     background: none;
     border: none;
     border-bottom: 1px solid #DAE0F2;
-    width: 35vh; 
+    width: 35vh;
     padding: 1%;
     height: 5vh;
     flex-grow: 1;
-    outline: none; 
+    outline: none;
     color: #DAE0F2;
 }
 
-input[type="sumbit"]{
-    border-radius: 25px;
+input[type="submit"] {
     width: 10vh;
     height: 5vh;
-    color: #DAE0F2;
+    font-family: 'Courier New', Courier, monospace;
+    cursor: pointer;
 }
+
