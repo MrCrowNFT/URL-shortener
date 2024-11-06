@@ -12,6 +12,8 @@ h1 {
 
 form {
     display: flex;
+    align-items: flex-end;
+    gap: none;
 }
 
 
@@ -40,10 +42,10 @@ input[type="url"] {
     background: none;
     border: none;
     border-bottom: 1px solid #DAE0F2;
-    width: 35vh;
+    width: 30vh;
     padding: 1%;
     height: 5vh;
-    flex-grow: 1;
+    
     outline: none;
     color: #DAE0F2;
 }
@@ -53,5 +55,7 @@ input[type="submit"] {
     height: 5vh;
     font-family: 'Courier New', Courier, monospace;
     cursor: pointer;
+    margin: none;
+    border: none;
 }
 
