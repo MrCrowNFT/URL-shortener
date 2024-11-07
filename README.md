@@ -7,6 +7,10 @@
 
 ### TODO
 #### Frontend
-- Shorten url page return
+- Shorten url return
+- Change the logo and name
 #### Backend
-- Everything XD
+- Shorten Url Handler
+- Redirect Handler
+- concatenate the random code to the shorten url
+- Update the database to take url insted of text

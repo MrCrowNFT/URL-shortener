@@ -23,7 +23,7 @@ type Url_pair struct {
 
 func main() {
 	http.HandleFunc("/", serveFrontPage)
-	http.HandleFunc("POST /shorten", shortenUrlHandles)
+	http.HandleFunc("POST /shorten", shortenUrlHandler)
 	http.HandleFunc("/", redirectHandler)
 	log.Fatal(http.ListenAndServe(":5500", nil))
 }
@@ -47,7 +47,7 @@ func serveFrontPage(w http.ResponseWriter, r *http.Request){
 	}
 }
 
-func shortenUrlHandles(w http.ResponseWriter, r *http.Request){
+func shortenUrlHandler(w http.ResponseWriter, r *http.Request){
 
 }
 
