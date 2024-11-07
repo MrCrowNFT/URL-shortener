@@ -2,7 +2,7 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
+	//"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -22,22 +22,41 @@ type Url_pair struct {
 }
 
 func main() {
-	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		t, err := template.ParseFiles("./UI/FrontPage.html")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		err = t.Execute()
-		if err != nil {
-			fmt.Println(err)
-
-		}
-	})
+	http.HandleFunc("/", serveFrontPage)
+	http.HandleFunc("POST /shorten", shortenUrlHandles)
+	http.HandleFunc("/", redirectHandler)
 	log.Fatal(http.ListenAndServe(":5500", nil))
 }
 
+// Handler function for listening to requests to the root URL ("/") 
+// and responds by sending the HTML page to the client
+func serveFrontPage(w http.ResponseWriter, r *http.Request){
+	// Parse the html file and create the templete
+	t, err := template.ParseFiles("./UI/FrontPage.html")
+	if err != nil {
+		// Return http 500 response if error parsing
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Execute the template and write it to the ResponseWriter to 
+	// display on the page
+	err = t.Execute(w, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func shortenUrlHandles(w http.ResponseWriter, r *http.Request){
+
+}
+
+func redirectHandler(w http.ResponseWriter, r *http.Request){
+
+}
+
 // Creates table on database if it does not exist
-func init() {
+func check_table() {
 	//open database
 	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
 	if err != nil {
@@ -61,16 +80,16 @@ func shorten(url string)(string, error){
 		log.Fatal(err)
 	}
 
-	//if is new url, return new random 
+	// If is new url, return new random 
 	if exists == false{
 		seed := rand.NewSource(time.Now().UnixNano())
 	random := rand.New(seed)
 
-	// make slice of length 7
+	// Make slice of length 7
 	result := make([]byte, R_LENGTH) 
 
 	for i := range result{
-		//get pseudo random char from charset 
+		// Get pseudo random char from charset 
 		result[i] = charset[random.Intn(len(charset))]
 	}
 	url_s := string(result)
@@ -79,7 +98,7 @@ func shorten(url string)(string, error){
 	return url_s, nil
 	} 
 
-	//if url already on db return the paired shorten url
+	// If url already on db return the paired shorten url
 	// Open db
 	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
 	if err != nil {
@@ -105,13 +124,13 @@ func check_url(url string)(bool, error){
 	if err != nil {
 		log.Fatal(err)
 	}
-	//close database when finished executing 
+	// Close database when finished executing 
 	defer URLpairDb.Close()
 
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM url_pairs WHERE url = ?)`
 
-	//scans the db and sets the exists variable accordingly
+	// Scans the db and sets the exists variable accordingly
 	URLpairDb.QueryRow(query, url).Scan(&exists)
 
 	return exists, nil
@@ -125,7 +144,7 @@ func create_pair(url string, url_s string){
 	if err != nil {
 		log.Fatal(err)
 	}
-	//close database when finished executing 
+	// Close database when finished executing 
 	defer URLpairDb.Close()
 
 	statement, err := URLpairDb.Prepare(`INSERT INTO url_pairs(url, url_s) VALUES(?, ?)`)
