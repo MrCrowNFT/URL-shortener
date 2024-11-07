@@ -120,5 +120,18 @@ func check_url(url string)(bool, error){
 
 // Adds the pair to the database
 func create_pair(url string, url_s string){
-	
+	// Open database
+	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+	//close database when finished executing 
+	defer URLpairDb.Close()
+
+	statement, err := URLpairDb.Prepare(`INSERT INTO url_pairs(url, url_s) VALUES(?, ?)`)
+	if err != nil{
+		log.Fatal(err)
+	} 
+
+	statement.Exec(url, url_s)
 }
