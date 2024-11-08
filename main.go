@@ -85,10 +85,31 @@ func shortenUrlHandler(w http.ResponseWriter, r *http.Request){
 
 	// Return the shorten url to user as response
 	fmt.Fprint(w, "%s", url_s)
-
 }
 
+// Handles redirect shorten url to the original url
 func redirectHandler(w http.ResponseWriter, r *http.Request){
+	// Get the shorten url
+	url_s := r.URL.Path
+
+	// Open database
+	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
+	if err != nil{
+		http.Error(w, "Error accessing database", http.StatusInternalServerError)
+		return
+	}
+
+	defer URLpairDb.Close()
+
+	var url string
+	// Select the url pair to the shorten url
+	query := `SELECT EXISTS(SELECT 1 FROM url_pairs WHERE url_s = ?)`
+
+	// Execute the query and copy the url into the url variable
+	URLpairDb.QueryRow(query, url_s).Scan(&url)
+
+	// Redirect user to the original database
+	http.Redirect(w, r, url, http.StatusFound)
 
 }
 
@@ -102,7 +123,7 @@ func check_table()(err error) {
 	}
 	defer URLpairDb.Close()
 
-	//create table if not exists
+	// Create table if not exists
 	_, err = URLpairDb.Exec(`CREATE TABLE IF NOT EXISTS url_pairs(
 	url TEXT NOT NULL, 
 	url_s TEXT NOT NULL);`)
@@ -166,7 +187,8 @@ func check_url(url string)(bool, error){
 	}
 	// Close database when finished executing 
 	defer URLpairDb.Close()
-
+	
+	// Create query to get the shorten url
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM url_pairs WHERE url = ?)`
 
@@ -187,10 +209,13 @@ func create_pair(url string, url_s string){
 	// Close database when finished executing 
 	defer URLpairDb.Close()
 
+	// Prepare the statement to add a new pair into the database
 	statement, err := URLpairDb.Prepare(`INSERT INTO url_pairs(url, url_s) VALUES(?, ?)`)
 	if err != nil{
 		log.Fatal(err)
 	} 
 
+	// Execute the statement to add the url along with ir shorten version into the database
 	statement.Exec(url, url_s)
 }
+
