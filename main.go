@@ -2,7 +2,7 @@ package main
 
 import (
 	"database/sql"
-	//"fmt"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -47,7 +47,44 @@ func serveFrontPage(w http.ResponseWriter, r *http.Request){
 	}
 }
 
+// Handles shorten url request when user submits a URL
 func shortenUrlHandler(w http.ResponseWriter, r *http.Request){
+	// Check the request is POST request
+	if r.Method != http.MethodPost{
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse the form to get the input
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, "Unable to parse form", http.StatusBadRequest)
+		return
+	}
+
+	// Retrive the URL input from the form
+	url := r.FormValue("url")
+	if url == "" {
+		http.Error(w, "URL is required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if table database exists
+	err = check_table()
+	if err != nil{
+		http.Error(w, "Error getting database table", http.StatusInternalServerError)
+		return
+	}
+
+	// Shorten the URL 
+	url_s , err := shorten(url)
+	if err != nil{
+		http.Error(w, "Error shortening the Url", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the shorten url to user as response
+	fmt.Fprint(w, "%s", url_s)
 
 }
 
@@ -56,11 +93,12 @@ func redirectHandler(w http.ResponseWriter, r *http.Request){
 }
 
 // Creates table on database if it does not exist
-func check_table() {
+func check_table()(err error) {
 	//open database
 	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
 	if err != nil {
 		log.Fatal(err)
+		return err
 	}
 	defer URLpairDb.Close()
 
@@ -70,7 +108,9 @@ func check_table() {
 	url_s TEXT NOT NULL);`)
 	if err != nil {
 		log.Fatal(err)
+		return err
 	}
+	return nil
 }
 
 // Shorten the url with random 7 alphanumeric characters
