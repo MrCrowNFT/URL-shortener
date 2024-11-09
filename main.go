@@ -44,7 +44,7 @@ func main() {
 
 	http.HandleFunc("/", serveFrontPage)
 	http.HandleFunc("POST /shorten", shortenUrlHandler)
-	http.HandleFunc("/", redirectHandler)
+	http.HandleFunc("/s/", redirectHandler)
 	log.Fatal(http.ListenAndServe(":5500", nil))
 }
 
@@ -97,7 +97,7 @@ func shortenUrlHandler(w http.ResponseWriter, r *http.Request){
 	}
 
 	// Return the shorten url to user as response
-	fmt.Fprint(w, "%s", s_url)
+	fmt.Fprintf(w, "%s", s_url)
 }
 
 // Handles redirect shorten url to the original url
@@ -107,8 +107,8 @@ func redirectHandler(w http.ResponseWriter, r *http.Request){
 
 	var url string
 	// Select the url pair to the shorten url and copy the url into the url variable
-	err := URLpairDb.QueryRow(`SELECT EXISTS(SELECT 1 FROM url_pairs WHERE s_url = ?)`, s_url).Scan(&url)
-	if err == sql.ErrConnDone{
+	err := URLpairDb.QueryRow(`SELECT 1 FROM url_pairs WHERE s_url = ?`, s_url).Scan(&url)
+	if err == sql.ErrNoRows{
 		http.NotFound(w, r)
 		return
 	} else if err != nil{
@@ -161,29 +161,31 @@ func shorten(url string)(string, error){
 }
 
 func create_shorten_url (url string)(s_url string){
-	seed := rand.NewSource(time.Now().UnixNano())
-	random := rand.New(seed)
+	for {
+		seed := rand.NewSource(time.Now().UnixNano())
+		random := rand.New(seed)
 
-	// Make slice of length 7
-	result := make([]byte, R_LENGTH) 
+		// Make slice of length 7
+		result := make([]byte, R_LENGTH) 
 
-	for i := range result{
+		for i := range result{
 		// Get pseudo random char from charset 
 		result[i] = CHARSET[random.Intn(len(CHARSET))]
-	}
-	
-	// Concatenate the result with the shorten url format
-	s_url = SHORTEN_FORMAT + string(result)
+		}
+		// Concatenate the result with the shorten url format
+		s_url = SHORTEN_FORMAT + string(result)
 
-	// Check if the s_url is unique
-	unique, err := check_s_url(s_url)
-	if err != nil{
+		// Check if the s_url is unique
+		unique, err := check_s_url(s_url)
+		if err != nil{
 		log.Fatal(err)
-	}
+		}
 
-	if unique == false{
-		s_url = create_shorten_url (url)
-		return s_url
+		// Only continue if the s_url is unique
+		if unique {
+			break
+		}
+	
 	}
 
 	return s_url
@@ -198,7 +200,10 @@ func create_pair(url string, s_url string){
 	} 
 
 	// Execute the statement to add the url along with ir shorten version into the database
-	statement.Exec(url, s_url)
+	_ , err = statement.Exec(url, s_url)
+	if err != nil{
+		log.Fatalf("Error inserting pair into database : v%", err)
+	}
 }
 
 // Check if url given has already been saveb in db, in wich case, return the saved shorten url.

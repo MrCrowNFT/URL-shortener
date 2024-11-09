@@ -9,5 +9,5 @@
 #### Frontend
 - Change the logo and name
 #### Backend
-- concatenate the random code to the shorten url
-- Update the database to take url insted of text
+- Testing 
+- Change database
