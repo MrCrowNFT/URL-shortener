@@ -17,12 +17,31 @@ const (
 	SHORTEN_FORMAT = "snap.link/"
 )
 
+// Make the database a global variable so that the functions get access to
+// already open db
+var URLpairDb *sql.DB
+
 type Url_pair struct {
-	url   string
-	s_url string
+	url   string 
+	s_url string 
 }
 
 func main() {
+	// Open database
+	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+	// Close database when finished executing 
+	defer URLpairDb.Close()
+
+	// Create table if it doesn't exist
+	err = check_table()
+	if err != nil {
+		log.Fatalf("Error creating table: %v", err)
+	}
+
+
 	http.HandleFunc("/", serveFrontPage)
 	http.HandleFunc("POST /shorten", shortenUrlHandler)
 	http.HandleFunc("/", redirectHandler)
@@ -36,14 +55,14 @@ func serveFrontPage(w http.ResponseWriter, r *http.Request){
 	t, err := template.ParseFiles("./UI/FrontPage.html")
 	if err != nil {
 		// Return http 500 response if error parsing
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Error loading page", http.StatusInternalServerError)
 		return
 	}
 	// Execute the template and write it to the ResponseWriter to 
 	// display on the page
 	err = t.Execute(w, nil)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Error executing page load", http.StatusInternalServerError)
 		return
 	}
 }
@@ -70,81 +89,79 @@ func shortenUrlHandler(w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-	// Check if table database exists
-	err = check_table()
-	if err != nil{
-		http.Error(w, "Error getting database table", http.StatusInternalServerError)
-		return
-	}
-
 	// Shorten the URL 
-	url_s , err := shorten(url)
+	s_url , err := shorten(url)
 	if err != nil{
 		http.Error(w, "Error shortening the Url", http.StatusInternalServerError)
 		return
 	}
 
 	// Return the shorten url to user as response
-	fmt.Fprint(w, "%s", url_s)
+	fmt.Fprint(w, "%s", s_url)
 }
 
 // Handles redirect shorten url to the original url
 func redirectHandler(w http.ResponseWriter, r *http.Request){
 	// Get the shorten url
-	url_s := r.URL.Path
+	s_url := r.URL.Path
 
-	// Open database
-	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
-	if err != nil{
-		http.Error(w, "Error accessing database", http.StatusInternalServerError)
+	var url string
+	// Select the url pair to the shorten url and copy the url into the url variable
+	err := URLpairDb.QueryRow(`SELECT EXISTS(SELECT 1 FROM url_pairs WHERE s_url = ?)`, s_url).Scan(&url)
+	if err == sql.ErrConnDone{
+		http.NotFound(w, r)
+		return
+	} else if err != nil{
+		http.Error(w, "Error accesing database", http.StatusInternalServerError)
 		return
 	}
 
-	defer URLpairDb.Close()
-
-	var url string
-	// Select the url pair to the shorten url
-	query := `SELECT EXISTS(SELECT 1 FROM url_pairs WHERE url_s = ?)`
-
-	// Execute the query and copy the url into the url variable
-	URLpairDb.QueryRow(query, url_s).Scan(&url)
-
 	// Redirect user to the original database
 	http.Redirect(w, r, url, http.StatusFound)
-
 }
 
 // Creates table on database if it does not exist
 func check_table()(err error) {
-	//open database
-	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
-	if err != nil {
-		log.Fatal(err)
-		return err
-	}
-	defer URLpairDb.Close()
-
 	// Create table if not exists
 	_, err = URLpairDb.Exec(`CREATE TABLE IF NOT EXISTS url_pairs(
 	url TEXT NOT NULL, 
-	url_s TEXT NOT NULL);`)
+	s_url TEXT NOT NULL);`)
 	if err != nil {
 		log.Fatal(err)
 		return err
 	}
-	return nil
+	return err
 }
 
 // Shorten the url with random 7 alphanumeric characters
 func shorten(url string)(string, error){
+	var s_url string
+
+	// Check if the url already into the database
 	exists, err := check_url(url)
 	if err != nil{
 		log.Fatal(err)
 	}
 
-	// If is new url, return new random 
-	if exists == false{
-		seed := rand.NewSource(time.Now().UnixNano())
+	// If url already on db return the paired shorten url get the short url from the db table
+	if exists{
+		query := `SELECT s_url FROM url_pairs WHERE url = ?`
+		URLpairDb.QueryRow(query, url).Scan(&s_url)
+
+		return s_url, nil
+	} 
+
+	// If is new url, get new random shorten url
+	s_url = create_shorten_url(url)
+
+	// Store the new pair in the database
+	create_pair(url, s_url)
+
+	return s_url, nil
+}
+
+func create_shorten_url (url string)(s_url string){
+	seed := rand.NewSource(time.Now().UnixNano())
 	random := rand.New(seed)
 
 	// Make slice of length 7
@@ -156,70 +173,53 @@ func shorten(url string)(string, error){
 	}
 	
 	// Concatenate the result with the shorten url format
-	url_s := SHORTEN_FORMAT + string(result)
-	// Store the new pair in the database
-	create_pair(url, url_s)
+	s_url = SHORTEN_FORMAT + string(result)
 
-	return url_s, nil
-	} 
-
-	// If url already on db return the paired shorten url
-	// Open db
-	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
-	if err != nil {
+	// Check if the s_url is unique
+	unique, err := check_s_url(s_url)
+	if err != nil{
 		log.Fatal(err)
 	}
-	// Close db when finishing executing
-	defer URLpairDb.Close()
 
-	var url_s string
-
-	// Get the short url from the db table
-	query := `SELECT url_s FROM url_pairs WHERE url = ?`
-	URLpairDb.QueryRow(query, url).Scan(&url_s)
-
-	return url_s, nil
-}
-
-// Check if url given has already been saveb in db, in wich case, return the saved shorten url.
-// if is new url, shorten it, create pair and add it to the database.
-func check_url(url string)(bool, error){
-	// Open database
-	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
-	if err != nil {
-		log.Fatal(err)
+	if unique == false{
+		s_url = create_shorten_url (url)
+		return s_url
 	}
-	// Close database when finished executing 
-	defer URLpairDb.Close()
-	
-	// Create query to get the shorten url
-	var exists bool
-	query := `SELECT EXISTS(SELECT 1 FROM url_pairs WHERE url = ?)`
 
-	// Scans the db and sets the exists variable accordingly
-	URLpairDb.QueryRow(query, url).Scan(&exists)
-
-	return exists, nil
+	return s_url
 }
-
 
 // Adds the pair to the database
-func create_pair(url string, url_s string){
-	// Open database
-	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Close database when finished executing 
-	defer URLpairDb.Close()
-
+func create_pair(url string, s_url string){
 	// Prepare the statement to add a new pair into the database
-	statement, err := URLpairDb.Prepare(`INSERT INTO url_pairs(url, url_s) VALUES(?, ?)`)
+	statement, err := URLpairDb.Prepare(`INSERT INTO url_pairs(url, s_url) VALUES(?, ?)`)
 	if err != nil{
 		log.Fatal(err)
 	} 
 
 	// Execute the statement to add the url along with ir shorten version into the database
-	statement.Exec(url, url_s)
+	statement.Exec(url, s_url)
 }
 
+// Check if url given has already been saveb in db, in wich case, return the saved shorten url.
+// if is new url, shorten it, create pair and add it to the database.
+func check_url(url string)(bool, error){
+	// Create query to get the shorten url
+	var exists bool
+	query := `SELECT EXISTS(SELECT 1 FROM url_pairs WHERE url = ?)`
+
+	// Scans the db and sets the exists variable accordingly
+	err := URLpairDb.QueryRow(query, url).Scan(&exists)
+	return exists, err
+}
+
+// Check if the shorten url was already used
+func check_s_url(s_url string)(bool, error){
+	// Create query to get the url
+	var s_exists bool 
+	query := `SELECT EXISTS(SELECT 1 FROM url_pairs WHERE s_url = ?)`
+
+	// Scans the db and sets the exists variable accordingly
+	err := URLpairDb.QueryRow(query, s_url).Scan(&s_exists)
+	return s_exists, err
+}
