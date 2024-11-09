@@ -13,7 +13,8 @@ import (
 
 const (
 	R_LENGTH = 7
-	charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	SHORTEN_FORMAT = "snap.link/"
 )
 
 type Url_pair struct {
@@ -151,11 +152,14 @@ func shorten(url string)(string, error){
 
 	for i := range result{
 		// Get pseudo random char from charset 
-		result[i] = charset[random.Intn(len(charset))]
+		result[i] = CHARSET[random.Intn(len(CHARSET))]
 	}
-	url_s := string(result)
+	
+	// Concatenate the result with the shorten url format
+	url_s := SHORTEN_FORMAT + string(result)
 	// Store the new pair in the database
 	create_pair(url, url_s)
+
 	return url_s, nil
 	} 
 
