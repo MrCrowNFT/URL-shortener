@@ -28,7 +28,8 @@ type Url_pair struct {
 
 func main() {
 	// Open database
-	URLpairDb, err := sql.Open("sqlite3", "./URLpair.db")
+	var err error 
+	URLpairDb, err = sql.Open("sqlite3", "./URLpair.db")
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
@@ -41,10 +42,14 @@ func main() {
 		log.Fatalf("Error creating table: %v", err)
 	}
 
+	// Serve static files from the "UI" directory
+    fs := http.FileServer(http.Dir("./UI"))
+    http.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	http.HandleFunc("/", serveFrontPage)
-	http.HandleFunc("POST /shorten", shortenUrlHandler)
+	http.HandleFunc("/shorten", shortenUrlHandler)
 	http.HandleFunc("/s/", redirectHandler)
+	
 	log.Fatal(http.ListenAndServe(":5500", nil))
 }
 
