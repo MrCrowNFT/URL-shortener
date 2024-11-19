@@ -36,20 +36,26 @@ func main() {
 	// Close database when finished executing 
 	defer URLpairDb.Close()
 
-	// Create table if it doesn't exist
+	// Verify database connection with Ping
+	err = URLpairDb.Ping()
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	log.Println("Database connection verified successfully.")
+
+	// Check if table exist
 	err = check_table()
 	if err != nil {
 		log.Fatalf("Error creating table: %v", err)
 	}
 
-	// Serve static files from the "UI" directory
-    fs := http.FileServer(http.Dir("./UI"))
-    http.Handle("/static/", http.StripPrefix("/static/", fs))
+	// Serve static files from the UI folder
+    http.Handle("/UI/", http.StripPrefix("/UI/", http.FileServer(http.Dir("./UI"))))
 
 	http.HandleFunc("/", serveFrontPage)
 	http.HandleFunc("/shorten", shortenUrlHandler)
 	http.HandleFunc("/s/", redirectHandler)
-	
+
 	log.Fatal(http.ListenAndServe(":5500", nil))
 }
 
@@ -74,8 +80,12 @@ func serveFrontPage(w http.ResponseWriter, r *http.Request){
 
 // Handles shorten url request when user submits a URL
 func shortenUrlHandler(w http.ResponseWriter, r *http.Request){
+	log.Println("Received request to shorten URL")
+	log.Println("Request method:", r.Method)
+
 	// Check the request is POST request
 	if r.Method != http.MethodPost{
+		log.Println("Invalid request method:", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -83,23 +93,30 @@ func shortenUrlHandler(w http.ResponseWriter, r *http.Request){
 	// Parse the form to get the input
 	err := r.ParseForm()
 	if err != nil {
+		log.Println("Error parsing form:", err)
 		http.Error(w, "Unable to parse form", http.StatusBadRequest)
 		return
 	}
+	log.Println("Form data:", r.Form)
 
 	// Retrive the URL input from the form
 	url := r.FormValue("url")
 	if url == "" {
+		log.Println("No URL provided")
 		http.Error(w, "URL is required", http.StatusBadRequest)
 		return
 	}
+	log.Println("URL received:", url)
 
 	// Shorten the URL 
 	s_url , err := shorten(url)
 	if err != nil{
+		log.Println("Error in shorten function:", err)
 		http.Error(w, "Error shortening the Url", http.StatusInternalServerError)
 		return
 	}
+
+	log.Printf("Shortened URL created: %s", s_url)
 
 	// Return the shorten url to user as response
 	fmt.Fprintf(w, "%s", s_url)
@@ -108,11 +125,11 @@ func shortenUrlHandler(w http.ResponseWriter, r *http.Request){
 // Handles redirect shorten url to the original url
 func redirectHandler(w http.ResponseWriter, r *http.Request){
 	// Get the shorten url
-	s_url := r.URL.Path
+	s_url := r.URL.Path[len("/s/"):]
 
 	var url string
 	// Select the url pair to the shorten url and copy the url into the url variable
-	err := URLpairDb.QueryRow(`SELECT 1 FROM url_pairs WHERE s_url = ?`, s_url).Scan(&url)
+	err := URLpairDb.QueryRow(`SELECT url FROM url_pairs WHERE s_url = ?`, s_url).Scan(&url)
 	if err == sql.ErrNoRows{
 		http.NotFound(w, r)
 		return
@@ -121,7 +138,7 @@ func redirectHandler(w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-	// Redirect user to the original database
+	// Redirect user to the original URL
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
@@ -145,27 +162,39 @@ func shorten(url string)(string, error){
 	// Check if the url already into the database
 	exists, err := check_url(url)
 	if err != nil{
-		log.Fatal(err)
+		log.Println("check_url error:", err)
+		return "", err
 	}
+	log.Println("URL exists in DB:", exists)
 
 	// If url already on db return the paired shorten url get the short url from the db table
 	if exists{
 		query := `SELECT s_url FROM url_pairs WHERE url = ?`
-		URLpairDb.QueryRow(query, url).Scan(&s_url)
-
+		err := URLpairDb.QueryRow(query, url).Scan(&s_url)
+		if err != nil{
+			if err == sql.ErrNoRows {
+				log.Println("URL not found in database.")
+			} else {
+				log.Println("Database query error:", err)
+			}
+			return "", err
+		}
 		return s_url, nil
 	} 
 
 	// If is new url, get new random shorten url
-	s_url = create_shorten_url(url)
+	s_url = create_shorten_url()
 
 	// Store the new pair in the database
-	create_pair(url, s_url)
+	err = create_pair(url, s_url)
+	if err != nil {
+		return "", err
+	}
 
 	return s_url, nil
 }
 
-func create_shorten_url (url string)(s_url string){
+func create_shorten_url()(s_url string){
 	for {
 		seed := rand.NewSource(time.Now().UnixNano())
 		random := rand.New(seed)
@@ -193,22 +222,30 @@ func create_shorten_url (url string)(s_url string){
 	
 	}
 
+	log.Printf("Generated short URL candidate: %s", s_url)
+
 	return s_url
 }
 
 // Adds the pair to the database
-func create_pair(url string, s_url string){
+func create_pair(url string, s_url string)(err error){
 	// Prepare the statement to add a new pair into the database
 	statement, err := URLpairDb.Prepare(`INSERT INTO url_pairs(url, s_url) VALUES(?, ?)`)
 	if err != nil{
+		log.Println("Error preparing statement:", err)
 		log.Fatal(err)
 	} 
+	defer statement.Close()
 
 	// Execute the statement to add the url along with ir shorten version into the database
 	_ , err = statement.Exec(url, s_url)
 	if err != nil{
-		log.Fatalf("Error inserting pair into database : v%", err)
-	}
+		log.Println("Error inserting pair into database:", err)
+	} else {
+        log.Printf("Successfully inserted pair: %s -> %s", url, s_url)
+    }
+
+	return err
 }
 
 // Check if url given has already been saveb in db, in wich case, return the saved shorten url.

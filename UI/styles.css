@@ -51,11 +51,13 @@ input[type="url"] {
 }
 
 input[type="submit"] {
-    width: 10vh;
+    width: auto; 
+    padding: 0 10px;
     height: 5vh;
     font-family: 'Courier New', Courier, monospace;
     cursor: pointer;
     margin: none;
     border: none;
+    text-align: center;
 }
 
