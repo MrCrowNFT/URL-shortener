@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"math/rand"
 	"time"
+	"os"
+	"os/signal"
+	"syscall"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -27,16 +30,15 @@ type Url_pair struct {
 }
 
 func main() {
-	// Open database
 	var err error 
+
+	// Open database
 	URLpairDb, err = sql.Open("sqlite3", "./URLpair.db")
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
-	// Close database when finished executing 
-	defer URLpairDb.Close()
 
-	// Verify database connection with Ping
+	// Verify database connection 
 	err = URLpairDb.Ping()
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -52,11 +54,32 @@ func main() {
 	// Serve static files from the UI folder
     http.Handle("/UI/", http.StripPrefix("/UI/", http.FileServer(http.Dir("./UI"))))
 
+	// Define HTTP handlers
 	http.HandleFunc("/", serveFrontPage)
 	http.HandleFunc("/shorten", shortenUrlHandler)
 	http.HandleFunc("/s/", redirectHandler)
 
-	log.Fatal(http.ListenAndServe(":5500", nil))
+	// Graceful shutdown handling
+	// Create a chanel for signals
+	stop := make(chan os.Signal, 1)
+	// Register the Signals to Listen For
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+
+	go func() {
+		log.Fatal(http.ListenAndServe(":5500", nil))
+	}()
+
+	// Wait for interrupt signal
+	<-stop
+	log.Println("Shutting down server...")
+
+	// Close database before exiting
+	if err := URLpairDb.Close(); err != nil {
+		log.Printf("Error closing database: %v", err)
+	} else {
+		log.Println("Database connection closed successfully.")
+	}
 }
 
 // Handler function for listening to requests to the root URL ("/") 
@@ -168,7 +191,7 @@ func shorten(url string)(string, error){
 	log.Println("URL exists in DB:", exists)
 
 	// If url already on db return the paired shorten url get the short url from the db table
-	if exists{
+	if exists == true{
 		query := `SELECT s_url FROM url_pairs WHERE url = ?`
 		err := URLpairDb.QueryRow(query, url).Scan(&s_url)
 		if err != nil{
@@ -195,7 +218,10 @@ func shorten(url string)(string, error){
 }
 
 func create_shorten_url()(s_url string){
+	log.Println("Shortening URL")
+
 	for {
+		log.Println("Getting Random Seed")
 		seed := rand.NewSource(time.Now().UnixNano())
 		random := rand.New(seed)
 
@@ -207,16 +233,19 @@ func create_shorten_url()(s_url string){
 		result[i] = CHARSET[random.Intn(len(CHARSET))]
 		}
 		// Concatenate the result with the shorten url format
+		log.Println("Creating shorten URL")
 		s_url = SHORTEN_FORMAT + string(result)
 
 		// Check if the s_url is unique
+		log.Println("Checking shorten URL collision")
 		unique, err := check_s_url(s_url)
 		if err != nil{
-		log.Fatal(err)
+			log.Fatal(err)
 		}
 
 		// Only continue if the s_url is unique
-		if unique {
+		log.Println("Checking shorten URL")
+		if unique == true{
 			break
 		}
 	
@@ -229,12 +258,16 @@ func create_shorten_url()(s_url string){
 
 // Adds the pair to the database
 func create_pair(url string, s_url string)(err error){
+	log.Printf("Attempting to insert pair: %s -> %s", url, s_url)
+	
 	// Prepare the statement to add a new pair into the database
 	statement, err := URLpairDb.Prepare(`INSERT INTO url_pairs(url, s_url) VALUES(?, ?)`)
 	if err != nil{
 		log.Println("Error preparing statement:", err)
 		log.Fatal(err)
-	} 
+	} else {
+		log.Printf("Successfully Prepared pair: insertion %s -> %s", url, s_url)
+	}
 	defer statement.Close()
 
 	// Execute the statement to add the url along with ir shorten version into the database
@@ -263,10 +296,10 @@ func check_url(url string)(bool, error){
 // Check if the shorten url was already used
 func check_s_url(s_url string)(bool, error){
 	// Create query to get the url
-	var s_exists bool 
+	var unique bool 
 	query := `SELECT EXISTS(SELECT 1 FROM url_pairs WHERE s_url = ?)`
 
 	// Scans the db and sets the exists variable accordingly
-	err := URLpairDb.QueryRow(query, s_url).Scan(&s_exists)
-	return s_exists, err
+	err := URLpairDb.QueryRow(query, s_url).Scan(&unique)
+	return !unique, err
 }

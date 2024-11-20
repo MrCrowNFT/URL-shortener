@@ -11,3 +11,5 @@
 #### Backend
 - Testing 
 - Change database
+- Fix Redirect Handle
+- Fix Shorten Url return
